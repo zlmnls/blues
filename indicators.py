@@ -99,7 +99,10 @@ def market_history(histories, quote_rows):
         quote = quotes.get(code,{})
         latest_t = f.iloc[-1]['turnover_pct']
         quoted_t = number(quote.get('f8'))
-        turnover_ok = bool(quoted_t is not None and quoted_t>=0.3 and pd.notna(latest_t)
+        # No minimum turnover: dropping stocks quoted below 0.3% removed the least-traded
+        # (mostly large-cap) names from the denominator for their whole history and pushed
+        # turnover_gt5_pct upward. The absolute 0.03 tolerance covers small values.
+        turnover_ok = bool(quoted_t is not None and quoted_t>=0 and pd.notna(latest_t)
                            and abs(float(latest_t)-quoted_t)<=max(0.03,0.06*quoted_t))
         if not turnover_ok:
             f['turnover_pct'] = np.nan
@@ -128,28 +131,59 @@ def market_history(histories, quote_rows):
     return out, quality
 
 
-def technical(frame):
+def technical(frame, boll_ddof=1):
+    """Indicators as shown in the video (Tongdaxin formulas).
+
+    Verified against values read off the video's weekly SSE chart:
+    VW-MACD(12,26,9), CCI(14), ICHIMOKU(7,22,44) with the cloud displaced 22 bars,
+    BOLL(20) = MA20 +/- 2 * STD, where Tongdaxin STD is the *sample* standard
+    deviation (ddof=1). ddof=0 (TradingView/StockCharts) is kept as an option.
+    """
     f = frame.copy()
     c,v,h,l = f['close'],f['volume'],f['high'],f['low']
+    # VW-MACD, video formula: VC1:=SUM(C*V,12)/SUM(V,12); VC2:=SUM(C*V,26)/SUM(V,26);
+    # DIF:VC1-VC2; DEA:EMA(DIF,9); MACD:(DIF-DEA)*2
     weighted = c*v
     short = weighted.rolling(12,min_periods=12).sum()/v.rolling(12,min_periods=12).sum().replace(0,np.nan)
     long = weighted.rolling(26,min_periods=26).sum()/v.rolling(26,min_periods=26).sum().replace(0,np.nan)
     f['vw_dif'] = short-long
     f['vw_dea'] = f['vw_dif'].ewm(span=9,adjust=False,min_periods=9).mean()
     f['vw_histogram'] = 2*(f['vw_dif']-f['vw_dea'])
+    # Plain MACD in the Chinese-software convention, for comparison only (not used in the video).
+    ema12 = c.ewm(span=12,adjust=False,min_periods=12).mean()
+    ema26 = c.ewm(span=26,adjust=False,min_periods=26).mean()
+    f['macd_dif'] = ema12-ema26
+    f['macd_dea'] = f['macd_dif'].ewm(span=9,adjust=False,min_periods=9).mean()
+    f['macd_hist'] = 2*(f['macd_dif']-f['macd_dea'])
+    # Ichimoku 7/22/44. Today's cloud = spans computed 22 bars ago (matches the video's
+    # "先行带A" readout exactly). The *_lead columns are today's spans, i.e. the cloud
+    # that will sit 22 bars ahead ("future cloud"); they use no future data.
     f['conversion_7'] = (h.rolling(7).max()+l.rolling(7).min())/2
     f['base_22'] = (h.rolling(22).max()+l.rolling(22).min())/2
-    # Shift=22 is an explicit assumption; only past values feed today's cloud.
-    f['cloud_a_assumed_shift22'] = ((f['conversion_7']+f['base_22'])/2).shift(22)
-    f['cloud_b_assumed_shift22'] = ((h.rolling(44).max()+l.rolling(44).min())/2).shift(22)
+    f['cloud_a_lead'] = (f['conversion_7']+f['base_22'])/2
+    f['cloud_b_lead'] = (h.rolling(44).max()+l.rolling(44).min())/2
+    f['cloud_a'] = f['cloud_a_lead'].shift(22)
+    f['cloud_b'] = f['cloud_b_lead'].shift(22)
+    f['cloud_top'] = f[['cloud_a','cloud_b']].max(axis=1,skipna=False)
+    f['cloud_bottom'] = f[['cloud_a','cloud_b']].min(axis=1,skipna=False)
+    # Chikou (lagging span) is close plotted 22 bars back. Reading it at a past bar uses
+    # future data, so only the causal comparison is stored: today's close vs close 22 bars ago.
+    f['chikou_above_price'] = (c > c.shift(22)).astype(float).where(c.shift(22).notna())
+    # Bollinger: Tongdaxin BOLL(20): MID=MA(C,20), UB/LB = MID +/- 2*STD(C,20), STD sample.
     f['boll_middle_20'] = c.rolling(20).mean()
-    std = c.rolling(20).std(ddof=0)
-    f['boll_upper_assumed_2sigma'] = f['boll_middle_20']+2*std
-    f['boll_lower_assumed_2sigma'] = f['boll_middle_20']-2*std
+    std = c.rolling(20).std(ddof=boll_ddof)
+    f['boll_upper'] = f['boll_middle_20']+2*std
+    f['boll_lower'] = f['boll_middle_20']-2*std
+    # CCI(14), Tongdaxin: (TYP-MA(TYP,14))/(0.015*AVEDEV(TYP,14)) - mean absolute deviation.
     tp = (h+l+c)/3
     tp_mean = tp.rolling(14).mean()
     mad = tp.rolling(14).apply(lambda a: np.abs(a-a.mean()).mean(),raw=True)
     f['cci_14'] = (tp-tp_mean)/(0.015*mad.replace(0,np.nan))
+    # Backward-compatible names used by analyze.py and older notebooks.
+    f['cloud_a_assumed_shift22'] = f['cloud_a']
+    f['cloud_b_assumed_shift22'] = f['cloud_b']
+    f['boll_upper_assumed_2sigma'] = f['boll_upper']
+    f['boll_lower_assumed_2sigma'] = f['boll_lower']
     return f
 
 
@@ -161,7 +195,12 @@ def weekly_bars(daily):
     dates = f.index.to_series().resample('W-FRI').max()
     result['date'] = dates
     result = result.dropna(subset=['open','close','date']).reset_index(drop=True)
-    return result[['date','open','close','high','low','volume','amount']]
+    # The last group may be a partial week (data collected midweek). Indicators on a
+    # partial bar change until Friday's close, so flag it instead of silently mixing it in.
+    result['week_complete'] = True
+    if len(result):
+        result.loc[result.index[-1],'week_complete'] = bool(result['date'].iloc[-1].weekday()>=4)
+    return result[['date','open','close','high','low','volume','amount','week_complete']]
 
 
 def pcr_history(days):

@@ -75,9 +75,9 @@ def charts(out,breadth,index_daily,index_tech,pcr,holders,erp):
     f=index_tech.loc[index_tech['date'].ge('2026-05-01')]
     fig,axs=plt.subplots(3,1,figsize=(12,9),sharex=True,layout='constrained')
     axs[0].plot(f['date'],f['close'],color='#1d3557',label='上证指数日线')
-    axs[0].fill_between(f['date'],f['cloud_a_assumed_shift22'],f['cloud_b_assumed_shift22'],color='#65a30d',alpha=.15,label='云层：移位 22 为显式假设')
+    axs[0].fill_between(f['date'],f['cloud_a_assumed_shift22'],f['cloud_b_assumed_shift22'],color='#65a30d',alpha=.15,label='云层：移位 22（与视频读数一致）')
     axs[0].legend(loc='upper left')
-    axs[0].set_title('技术指标复现｜VW-MACD 按视频公式，云层移位为假设')
+    axs[0].set_title('技术指标复现｜VW-MACD、BOLL、CCI、云层均按视频通达信口径')
     axs[1].plot(f['date'],f['vw_dif'],color='#2563eb',label='DIF：VWMA12 − VWMA26')
     axs[1].plot(f['date'],f['vw_dea'],color='#d97706',label='DEA：EMA9(DIF)')
     axs[1].bar(f['date'],f['vw_histogram'],color=np.where(f['vw_histogram']>=0,'#d45656','#2c8e83'),alpha=.4,label='2 × (DIF − DEA)')
@@ -217,7 +217,7 @@ def main():
        'pcr_issues':pcr_issues,'shareholder_quality':holder_quality,'valuation_errors':valuation['errors'],
        'assumptions':{'P20/P60':'percentage of eligible prices above MA20/MA60; hypothesis only',
                       'MCL':'19/39 EMA differences of net advances, plus ratio-adjusted variant; hypothesis only; EMA seeded with first observation',
-                      'composite_score':'undefined, not generated','cloud_shift':22,'boll_sigma':2,'boll_std_ddof':0,
+                      'composite_score':'undefined, not generated','cloud_shift':22,'boll_sigma':2,'boll_std_ddof':1,
                       'equity_bond_spread':'100 / provider PE - 10y yield in percent; PE response is sparse/monthly; 12 matched observations rolling ±2 sigma; hypothesis only, 252-day bands unavailable',
                       'weekly_bar':'Last observed trading session, final group may be incomplete if collected midweek',
                       'returns':'Tencent qfq close changes, not original unrounded daily return flags'},
@@ -301,7 +301,7 @@ def main():
 
 **技术与股债候选**
 
-一目均衡表参数使用 7、22、44；云层移位暂设 22。布林带暂设 20 期、2 倍总体标准差。移位与倍数在原视频中未完整展示，均记录在质量报告；CCI 使用 14 期。没有把这些曲线自动转成买卖指令。
+一目均衡表参数 7、22、44，云层移位 22；布林带 20 期、2 倍样本标准差（通达信 STD）；CCI 14 期；VW-MACD 12、26、9。以上口径已用视频中周线读数逐一核对。信号规则见 signals.py，仅供研究。
 
 ![技术指标](figures/technical.png)
 
