@@ -1,0 +1,56 @@
+name: Dashboard daily update
+
+# A-share close is 15:00 Beijing (07:00 UTC). Run at 16:30 and again at 19:00 Beijing,
+# Monday to Saturday. The Saturday run picks up Friday's completed COMEX gold session.
+# GitHub Pages serves the main branch root (dashboard/ holds the page); each data commit
+# is followed by an explicit Pages build request.
+on:
+  schedule:
+    - cron: '30 8 * * 1-6'
+    - cron: '0 11 * * 1-6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Build dashboard data
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          python build_dashboard.py --out dashboard || (echo 'first attempt failed, retrying in 60 s' && sleep 60 && python build_dashboard.py --out dashboard)
+
+      - name: Commit data archive
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dashboard/data
+          if git diff --cached --quiet; then echo 'no data change'; exit 0; fi
+          git commit -m "dashboard data $(TZ=Asia/Shanghai date +%F)"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break; sleep 5; done
+
+      - name: Request Pages build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST repos/${{ github.repository }}/pages/builds || echo 'Pages build request failed; the push itself normally triggers a build'
