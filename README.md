@@ -190,6 +190,18 @@ blues/
 └── results/                   # 本地计算输出，不入库
 ```
 
+## 每日看板（GitHub Pages）
+
+网址：https://zlmnls.github.io/blues/
+
+- 标的：上证指数、深证成指、创业板指、纽约金（COMEX GC 连续），日线和周线。
+- 指标：一目均衡表（7/22/44，云前移 22）、VW-MACD 12/26/9、BOLL(20，样本标准差)、CCI(14)，`signals.py` 里的博主规则，以及 `observation_points.py` 里能自动取数的观察点。
+- 每只标的都标出：现价在云上/云中/云下、入云价和出云价（云上下沿）、下一根 K 线的云、最近一次入云/出云/出云失败的日期；博主点名的价位（上证 4000/3600/3500/3400）离现价多远、最近一次收盘穿越；纽约金另列你自己的分批计划点位和触发状态。
+- 只有博主在视频里说过的规则才标“卖出/看空”，每条注明视频编号和时间；他没给买入规则，页面写“博主未给出买入规则”。
+- 更新：`.github/workflows/dashboard.yml`（GitHub Pages 用 main 分支根目录发布，根目录 index.html 跳转到 dashboard/）在北京时间周一到周六 16:30 和 19:00 运行 `build_dashboard.py`，写 `dashboard/data/latest.json`，并按北京日期存档到 `dashboard/data/archive/YYYY-MM-DD.json`，页面左上角可选历史日期。PCR 和每日观察值的历史分别累积在 `dashboard/data/history/`。
+- 数据源都在海外服务器上实测过：A 股指数用腾讯证券（备用新浪、Yahoo），纽约金用 Yahoo（备用新浪外盘），全市场快照用新浪，PCR 用上交所，股债利差用中证指数公司 + 东方财富数据中心。东方财富 push2 行情接口和深交所期权接口在海外连不上，所以没用。
+- 本地生成：`python build_dashboard.py --out dashboard`，然后在 `dashboard/` 下 `python -m http.server` 打开。
+
 ## 数据与复现边界
 
 - 当前股票名册回溯会遗漏已经退市的证券，不能直接视为历史全市场全集。

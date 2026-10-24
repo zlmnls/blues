@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>布鲁斯指标看板</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body><div class="wrap">
+<h1>布鲁斯指标看板</h1>
+<p class="kicker">上证、深成、创业板、纽约金，日线 + 周线</p>
+<p class="updated" id="updated">正在读取数据…</p>
+<div class="toolbar">
+  <label>历史日期 <select id="datePick"></select></label>
+  <span class="muted" id="params"></span>
+</div>
+<nav class="jump" id="tabs"></nav>
+<p class="lede" id="lede"></p>
+<div id="inst"></div>
+<h2 id="obs">A 股数据观察点</h2>
+<p class="kicker">博主视频里提到的资金、情绪和估值数据</p>
+<div id="obsCards" class="grid2"></div>
+<h2>没有数据的项目</h2>
+<div class="card"><ul id="unavail"></ul></div>
+<div id="errors"></div>
+<div class="sources"><b>说明</b><ul>
+<li>指标参数和算法来自仓库里的 <a href="https://github.com/zlmnls/blues/blob/main/indicators.py">indicators.py</a>、<a href="https://github.com/zlmnls/blues/blob/main/signals.py">signals.py</a>、<a href="https://github.com/zlmnls/blues/blob/main/observation_points.py">observation_points.py</a>，生成脚本是 <a href="https://github.com/zlmnls/blues/blob/main/build_dashboard.py">build_dashboard.py</a>。</li>
+<li>“卖出/看空”只标博主在视频里说过的规则，每条都注明出处（视频编号和时间）。博主没给买入规则的地方写“博主未给出买入规则”。纽约金的分批买入是你自己的计划，单独标出。</li>
+<li>每天北京时间 16:30 和 19:00（周一至周六）由 GitHub Actions 自动更新，每次更新按北京日期存档到 <a href="https://github.com/zlmnls/blues/tree/main/dashboard/data/archive">dashboard/data/archive</a>。GitHub 的定时任务有时会晚几十分钟。</li>
+<li id="disclaimer">仅为技术分析研究，不构成投资建议。</li>
+</ul></div>
+</div>
+<script src="app.js"></script>
+</body></html>
