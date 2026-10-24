@@ -24,6 +24,25 @@
 
 详细公式见 [指标说明](docs/INDICATORS.md)。上表中的“已实现”表示能计算出数值，不表示已经证明与原作者的隐藏算法完全一致。
 
+## 原始视频素材
+
+三个分析参考视频保存在 [materials/videos](materials/videos)，使用 Git LFS 管理：
+
+| 文件 | 大小 |
+|---|---:|
+| [21908.mp4](materials/videos/21908.mp4) | 23.37 MiB |
+| [21909.mp4](materials/videos/21909.mp4) | 74.58 MiB |
+| [21910.mp4](materials/videos/21910.mp4) | 48.06 MiB |
+
+在 GitHub 文件页面点击下载可获取视频。克隆仓库前需安装 [Git LFS](https://git-lfs.com/)，已有克隆可在仓库目录运行：
+
+```bash
+git lfs install
+git lfs pull
+```
+
+视频是复现分析的参考素材；计算公式、确认程度和实现边界以本项目文档为准。
+
 ## 已有示例
 
 仓库提供了截至 **2026-10-23** 的[汇总结果和图表](examples/2026-10-23/README.md)。这次取得了新浪当前名册中 **5,576 只股票**的历史数据；当时有效样本数会随上市日期、停牌和缺失字段变化。
