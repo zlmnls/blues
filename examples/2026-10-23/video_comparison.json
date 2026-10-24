@@ -1,0 +1,42 @@
+[
+  {
+    "date": "2026-09-21",
+    "metric": "up_pct_all",
+    "video_value": 80.0,
+    "reproduced_value": 81.68227665706051,
+    "difference": 1.6822766570605125,
+    "scope": "Current Sina-list retrospective sample; Tencent adjusted-price direction; not proved to be original universe."
+  },
+  {
+    "date": "2026-09-21",
+    "metric": "down_pct_all",
+    "video_value": 17.6,
+    "reproduced_value": 16.85878962536023,
+    "difference": -0.7412103746397705,
+    "scope": "Current Sina-list retrospective sample; Tencent adjusted-price direction; not proved to be original universe."
+  },
+  {
+    "date": "2026-09-21",
+    "metric": "down_amount_pct",
+    "video_value": 27.0,
+    "reproduced_value": 28.184292892178785,
+    "difference": 1.1842928921787852,
+    "scope": "Current Sina-list retrospective sample; Tencent adjusted-price direction; not proved to be original universe."
+  },
+  {
+    "date": "2026-09-21",
+    "metric": "trin_amount",
+    "video_value": 1.69,
+    "reproduced_value": 1.9255633843472324,
+    "difference": 0.23556338434723245,
+    "scope": "Current Sina-list retrospective sample; Tencent adjusted-price direction; not proved to be original universe."
+  },
+  {
+    "date": "2026-09-22",
+    "metric": "up_pct_all",
+    "video_value": 43.7,
+    "reproduced_value": 42.73103945235093,
+    "difference": -0.9689605476490755,
+    "scope": "Current Sina-list retrospective sample; Tencent adjusted-price direction; not proved to be original universe."
+  }
+]

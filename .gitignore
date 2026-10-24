@@ -1,0 +1,28 @@
+# Local inputs, request responses and newly generated results
+/data/
+/cache/
+/results/
+
+# Python environments and temporary output
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+*.log
+*.tmp
+*.zip
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db

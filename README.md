@@ -139,4 +139,3 @@ blues/
 - 图表优先使用 Windows 微软雅黑。其他平台若中文显示异常，可修改 `analyze.py` 的 `setup_plot()`，指定本地中文字体。
 
 数据来源、单位和时间可得性见 [数据说明](docs/DATA.md)。
-

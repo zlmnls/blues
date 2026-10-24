@@ -1,0 +1,43 @@
+{
+  "snapshot": {
+    "provider_total": 5576,
+    "quote_dates": [],
+    "provider": "Sina",
+    "calendar_date_status": "Only clock time is supplied; assigned collection date, not independently verified by snapshot endpoint.",
+    "universe": "Sina current mainland A-share provider list",
+    "historical_universe_limitation": "Current-list retrospective sample; delisted securities absent."
+  },
+  "history_requested": 5576,
+  "history_received": 5576,
+  "history_errors": [],
+  "history_nonempty": 5576,
+  "volume_calibrated": 5576,
+  "volume_calibrated_exact_cross_source": 5571,
+  "volume_calibrated_approximate": 5,
+  "turnover_calibrated": 5514,
+  "pcr_issues": [],
+  "shareholder_quality": {
+    "exact_duplicates_removed": 7,
+    "records_used": 30471,
+    "time_basis": "announcement date, not effective interval date",
+    "limitation": "Not merged with executives. Cumulative/overlapping disclosure intervals may remain; these are ratio candidates, not an audited net-flow series."
+  },
+  "valuation_errors": [],
+  "assumptions": {
+    "P20/P60": "percentage of eligible prices above MA20/MA60; hypothesis only",
+    "MCL": "19/39 EMA differences of net advances, plus ratio-adjusted variant; hypothesis only; EMA seeded with first observation",
+    "composite_score": "undefined, not generated",
+    "cloud_shift": 22,
+    "boll_sigma": 2,
+    "boll_std_ddof": 0,
+    "equity_bond_spread": "100 / provider PE - 10y yield in percent; PE response is sparse/monthly; 12 matched observations rolling ±2 sigma; hypothesis only, 252-day bands unavailable",
+    "weekly_bar": "Last observed trading session, final group may be incomplete if collected midweek",
+    "returns": "Tencent qfq close changes, not original unrounded daily return flags"
+  },
+  "runtime": {
+    "python": "3.12.14",
+    "pandas": "3.0.1",
+    "numpy": "2.3.5",
+    "matplotlib": "3.11.2"
+  }
+}
