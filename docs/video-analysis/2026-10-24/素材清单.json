@@ -1,0 +1,30 @@
+[
+  {
+    "file": "21922.mp4",
+    "bytes": 46164279,
+    "sha256": "ddc76aaedf580d14897010f17fcfa5642b4fd6dcd5ee41420ea40e0cb1dfe05e",
+    "duration_seconds": 205.17000000000002,
+    "onscreen_date": "2026-10-19 早盘前"
+  },
+  {
+    "file": "21923.mp4",
+    "bytes": 86949562,
+    "sha256": "03871828d8c37e67eca13397182c8fc0e8aba309e2b11dd523c1cd6bd93dcd14",
+    "duration_seconds": 410.67,
+    "onscreen_date": "无明确日期标签"
+  },
+  {
+    "file": "21924.mp4",
+    "bytes": 80689551,
+    "sha256": "968aa23ba52d8ae7d5182ffeabae476b00a8f550c6c7dae945d837d57d2ba911",
+    "duration_seconds": 320.62,
+    "onscreen_date": "2026-10-16 盘前"
+  },
+  {
+    "file": "21925.mp4",
+    "bytes": 67544859,
+    "sha256": "bb2440e5ee72c56f7290c0cd34fb036f016480dd64ad93db08e9264d34aede5d",
+    "duration_seconds": 313.84,
+    "onscreen_date": "2026-10-14"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/zlmnls/blues",
+  "analysis_date": "2026-10-24",
+  "algorithm_base_commit": "b155ffcc0e736f001b520eab2c59ee4378c6e429",
+  "tests": "python -m unittest discover -v: 20 passed",
+  "algorithm_modified_for_this_analysis": false,
+  "archive_scope": "Four source videos, analysis report, 18-row indicator extraction, timestamped machine transcripts, evidence images, SHA-256 manifest, and corrected README implementation status"
+}
