@@ -97,7 +97,7 @@ python -m unittest test_indicators -v
 
 本次验证环境为 Python 3.12.14、numpy 2.3.5、pandas 3.0.1、matplotlib 3.11.2。要使用这些精确依赖版本，可安装 `requirements-tested.txt`。
 
-运行全部测试（目前 **20 项**）：
+运行全部测试（目前 **37 项**）：
 
 ```bash
 python -m unittest discover -v
@@ -114,6 +114,23 @@ python signals.py path/to/daily.csv --since 2026-01-01
 ```
 
 脚本输出周线方向、日线形态、确认数量和组合信号。`analyze.py` 尚未自动调用此流程，需单独运行。触云容差、冷却期、背离间隔和组合条件属于仓库的工程化候选，不等于原作者已公开的完整交易规则。股票 CSV 的信号也不会直接选择期权合约或产生订单。
+
+## 数据观察点候选（21922–21925）
+
+`observation_points.py` 把 10 月 14–19 日四个视频提到的数据观察点写成可测试的候选计算。视频没有公开窗口、倍数、样本范围和阈值，这些都保留为参数，不代表原作者公式：
+
+- `rolling_band` / `band_events`：通用的均值 ± k 倍标准差带（默认样本标准差），标记触及上轨、穿越中轨和所处区间。
+- `equity_bond_bottom_signal`：股债利差触及上轨记为潜在底部候选，只越过中轨记为“半山腰”。`equity_bond_candidate()` 新增 `band_ddof` 参数，默认值不变。
+- `pcr_spike`：PCR 相对统计带的位置，区分“上升但未触及上轨”和“触及上轨”。
+- `disclosed_holdings_change` / `holdings_as_of`：机构每期披露持股家数及变化率，按最后公告日才可用。
+- `volume_context`：ETF 成交量与前 5/20 日均量（不含当日）、年内此前最大量和指定参照日的比值。
+- `equal_weight_pe` / `valuation_zone`：三种明确写出的等权 PE 构造，以及机会值/危险值分区。
+- `market_cap_to_gdp` / `gdp_ttm_from_quarters`：总市值 / 滚动四季度名义 GDP，只用已公布的 GDP。
+- `futures_basis`：基差、基差率和年化基差率。
+- `bs_price` / `greeks` / `implied_vol` / `long_put_pnl`：欧式期权定价、五个 Greeks、IV 反解，以及把买入认沽的盈亏拆成“方向和时间”与“IV 变化”两部分。
+- `bottom_checklist`：只报告各底部条件是否满足或未知，不给买卖结论。
+
+这些函数目前没有接入 `analyze.py`，也没有对应的数据采集；需要自行准备输入表。
 
 ## 采集和重新计算
 
@@ -158,9 +175,11 @@ blues/
 ├── fetch_data.py              # 接口适配、分页、缓存和响应哈希
 ├── indicators.py              # 指标计算
 ├── signals.py                 # 技术形态和周日线组合候选
+├── observation_points.py      # 资金、估值、PCR、期权等数据观察点候选
 ├── analyze.py                 # 离线计算、图表和结果说明
 ├── test_indicators.py         # 数值和时间信息测试
 ├── test_signals.py            # 形态、移位与因果性测试
+├── test_observation_points.py # 观察点候选的数值与时间测试
 ├── verify_inputs.py           # 输入完整性校验
 ├── requirements.txt
 ├── requirements-tested.txt
@@ -178,7 +197,7 @@ blues/
 - 股东统计按公告日过滤；董监高明细尚缺经过验证的历史公告时间，两张表没有直接相加。
 - PCR 目前覆盖上交所、深交所 ETF 期权，不含中金所指数期权。跨标的汇总使用总认沽除以总认购，不对各标的比例简单平均。
 - 实际取得的 PE 是稀疏/月度样本，未填充成日频。股债图的统计带使用 12 个匹配观测点，只是候选展示。
-- “顶/底背离”“出云失败”和部分技术组合信号已在 `signals.py` 中实现候选规则；机构持仓、等权 PE、市值/GDP、债券仓位、期货基差和期权 IV/Greeks 尚无对应完整模块。当前版本没有交易执行和收益回测。
+- “顶/底背离”“出云失败”和部分技术组合信号已在 `signals.py` 中实现候选规则；机构持仓变化、等权 PE、市值/GDP、期货基差和期权 IV/Greeks 已在 `observation_points.py` 中有计算候选，但没有数据采集；债券仓位因口径不明仍未实现。当前版本没有交易执行和收益回测。
 - 图表优先使用 Windows 微软雅黑。其他平台若中文显示异常，可修改 `analyze.py` 的 `setup_plot()`，指定本地中文字体。
 
 数据来源、单位和时间可得性见 [数据说明](docs/DATA.md)。

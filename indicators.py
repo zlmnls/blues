@@ -273,12 +273,15 @@ def shareholder_monthly(rows,as_of):
         'limitation':'Not merged with executives. Cumulative/overlapping disclosure intervals may remain; these are ratio candidates, not an audited net-flow series.'}
 
 
-def equity_bond_candidate(pe_frame, treasury_frame, window=252, band_sigma=2):
-    """Explicit hypothesis: earnings yield 100/PE minus 10y yield in percent."""
+def equity_bond_candidate(pe_frame, treasury_frame, window=252, band_sigma=2, band_ddof=0):
+    """Explicit hypothesis: earnings yield 100/PE minus 10y yield in percent.
+
+    band_ddof=0 keeps the original population std; pass 1 for the sample std
+    (Tongdaxin STD). Video 21924 does not say which one its band uses."""
     f = pe_frame[['date','pe_ttm']].merge(treasury_frame[['date','yield_10y_pct']],on='date',how='inner').sort_values('date')
     f['spread_pct_points'] = 100/f['pe_ttm'].where(f['pe_ttm'].gt(0))-f['yield_10y_pct']
     f['rolling_mean'] = f['spread_pct_points'].rolling(window,min_periods=window).mean()
-    f['rolling_std'] = f['spread_pct_points'].rolling(window,min_periods=window).std(ddof=0)
+    f['rolling_std'] = f['spread_pct_points'].rolling(window,min_periods=window).std(ddof=band_ddof)
     f['upper'] = f['rolling_mean']+band_sigma*f['rolling_std']
     f['lower'] = f['rolling_mean']-band_sigma*f['rolling_std']
     f['z_score'] = (f['spread_pct_points']-f['rolling_mean'])/f['rolling_std'].replace(0,np.nan)
