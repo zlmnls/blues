@@ -122,7 +122,7 @@ def bars_eastmoney_gold(start='20200101'):
     j = http_json('https://push2his.eastmoney.com/api/qt/stock/kline/get',
                   {'secid': '101.GC00Y', 'fields1': 'f1,f2,f3', 'fields2': 'f51,f52,f53,f54,f55,f56',
                    'klt': 101, 'fqt': 0, 'beg': start, 'end': '20500101', 'lmt': 3000}, EM,
-                  tries=3, timeout=20, backoff=15)
+                  tries=2, timeout=20, backoff=20)
     rows = [r.split(',') for r in ((j.get('data') or {}).get('klines') or [])]
     return _frame([[r[0], r[1], r[3], r[4], r[2], r[5]] for r in rows])  # date, open, close, high, low, volume
 
@@ -222,7 +222,7 @@ def market_fund_flow():
     j = http_json('https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get',
                   {'lmt': 0, 'klt': 101, 'secid': '1.000001', 'secid2': '0.399001', 'fields1': 'f1,f2,f3,f7',
                    'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65'},
-                  {'Referer': 'https://data.eastmoney.com/zjlx/dpzjlx.html'}, tries=3, timeout=20, backoff=15)
+                  {'Referer': 'https://data.eastmoney.com/zjlx/dpzjlx.html'}, tries=2, timeout=20, backoff=20)
     rows = [r.split(',') for r in ((j.get('data') or {}).get('klines') or [])]
     if not rows:
         raise RuntimeError('fund flow: empty klines')
