@@ -1,13 +1,11 @@
-name: Dashboard daily update
+name: Dashboard manual update (backup)
 
-# A-share close is 15:00 Beijing (07:00 UTC). Run at 16:30 and again at 19:00 Beijing,
-# Monday to Saturday. The Saturday run picks up Friday's completed COMEX gold session.
-# GitHub Pages serves the main branch root (dashboard/ holds the page); each data commit
-# is followed by an explicit Pages build request.
+# The scheduled update now runs on the mainland server (Tencent Cloud, cron Mon-Sat 16:30 and
+# 19:00 Beijing), which can reach the SZSE option report and Eastmoney push2 that GitHub's
+# overseas runners cannot. The server pushes each day's data here as a backup, so this workflow
+# has no schedule (two writers would conflict). Run it by hand only if the server is down.
+# GitHub Pages serves the main branch root (dashboard/ holds the page).
 on:
-  schedule:
-    - cron: '30 8 * * 1-6'
-    - cron: '0 11 * * 1-6'
   workflow_dispatch:
 
 permissions:

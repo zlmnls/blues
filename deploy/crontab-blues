@@ -1,0 +1,3 @@
+# Blues dashboard update, Mon-Sat 16:30 and 19:00 Beijing time (server clock is Asia/Shanghai).
+30 16 * * 1-6 root /opt/blues/deploy/update.sh >> /var/log/blues/update.log 2>&1
+0 19 * * 1-6 root /opt/blues/deploy/update.sh >> /var/log/blues/update.log 2>&1

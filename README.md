@@ -198,8 +198,9 @@ blues/
 - 指标：一目均衡表（7/22/44，云前移 22）、VW-MACD 12/26/9、BOLL(20，样本标准差)、CCI(14)，`signals.py` 里的博主规则，以及 `observation_points.py` 里能自动取数的观察点。
 - 每只标的都标出：现价在云上/云中/云下、入云价和出云价（云上下沿）、下一根 K 线的云、最近一次入云/出云/出云失败的日期；博主点名的价位（上证 4000/3600/3500/3400）离现价多远、最近一次收盘穿越；纽约金另列你自己的分批计划点位和触发状态。
 - 只有博主在视频里说过的规则才标“卖出/看空”，每条注明视频编号和时间；他没给买入规则，页面写“博主未给出买入规则”。
-- 更新：`.github/workflows/dashboard.yml`（GitHub Pages 用 main 分支根目录发布，根目录 index.html 跳转到 dashboard/）在北京时间周一到周六 16:30 和 19:00 运行 `build_dashboard.py`，写 `dashboard/data/latest.json`，并按北京日期存档到 `dashboard/data/archive/YYYY-MM-DD.json`，页面左上角可选历史日期。PCR 和每日观察值的历史分别累积在 `dashboard/data/history/`。
-- 数据源都在海外服务器上实测过：A 股指数用腾讯证券（备用新浪、Yahoo），纽约金用 Yahoo（备用新浪外盘），全市场快照用新浪，PCR 用上交所，股债利差用中证指数公司 + 东方财富数据中心。东方财富 push2 行情接口和深交所期权接口在海外连不上，所以没用。
+- 主站部署在腾讯云国内服务器：http://118.25.109.118:28473/ （nginx 独立 server 块，只读静态文件，根目录就是 `dashboard/`）。GitHub Pages（https://zlmnls.github.io/blues/）保留为备用页面。
+- 更新：服务器 cron（`/etc/cron.d/blues-dashboard`）在北京时间周一到周六 16:30 和 19:00 运行 `deploy/update.sh`：跑 `build_dashboard.py`（失败 60 秒后重试一次），写 `dashboard/data/latest.json`，并按北京日期存档到 `dashboard/data/archive/YYYY-MM-DD.json`；然后把 `dashboard/data` 提交并推送到 GitHub 当备份（带超时和重试，推送失败不影响服务器上的看板）。日志在 `/var/log/blues/update.log`，按周轮转、超过 5 MB 也轮转。`.github/workflows/dashboard.yml` 已去掉定时，只能手动触发，避免两边同时写数据。部署文件在 `deploy/`。
+- 数据源：A 股指数用腾讯证券（备用新浪、Yahoo），纽约金用东方财富 COMEX 黄金连续 GC00Y（含成交量；国内服务器访问 Yahoo 会被 429 限流，备用 Yahoo、新浪外盘），全市场快照用新浪，PCR 用上交所 + 深交所两所 ETF 期权合计，资金流向用东方财富大盘资金流（push2his），股债利差用中证指数公司 + 东方财富数据中心。深交所期权和东方财富 push2 只在国内服务器上能拿到；push2 对同一 IP 短时间多次请求会暂时断开，所以每次更新只请求两次。
 - 本地生成：`python build_dashboard.py --out dashboard`，然后在 `dashboard/` 下 `python -m http.server` 打开。
 
 ## 数据与复现边界

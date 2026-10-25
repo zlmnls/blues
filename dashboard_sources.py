@@ -1,10 +1,18 @@
-"""Network fetchers for the dashboard, chosen because they answer from overseas runners.
+"""Network fetchers for the dashboard.
 
 Tested from a US data centre on 2026-10-24 (same situation as GitHub Actions):
   works   Tencent kline (web.ifzq.gtimg.cn), Sina quotes/kline/snapshot (Referer needed),
           Yahoo chart API, Eastmoney datacenter-web, SSE commonQuery (Referer needed, ~5 s),
           CSIndex index-perf
   blocked Eastmoney push2 / push2his (connection closed), SZSE option report (403/reset)
+
+Tested from the mainland server (Tencent Cloud, Shanghai) on 2026-10-25, where the dashboard
+now runs:
+  works   everything above except Yahoo, plus SZSE option daily report (investor.szse.cn) and
+          Eastmoney push2 / push2his (market fund flow, COMEX gold daily bars with volume)
+  blocked Yahoo chart API (HTTP 429 for this IP)
+  caveat  push2 / push2his close the connection for a while when one IP sends several requests
+          in quick succession, so those calls are few, spaced out and retried slowly.
 Every call retries with backoff; callers record failures instead of inventing values.
 """
 from datetime import datetime, timedelta, timezone
@@ -22,7 +30,7 @@ SINA = {'Referer': 'https://finance.sina.com.cn/'}
 SSE = {'Referer': 'https://www.sse.com.cn/'}
 
 
-def http(url, params=None, headers=None, tries=4, timeout=20, encoding=None):
+def http(url, params=None, headers=None, tries=4, timeout=20, encoding=None, backoff=2):
     if params:
         url = url + ('&' if '?' in url else '?') + urllib.parse.urlencode(params)
     last = None
@@ -40,7 +48,7 @@ def http(url, params=None, headers=None, tries=4, timeout=20, encoding=None):
         except Exception as exc:  # network errors are retried, then raised
             last = exc
             if i < tries - 1:
-                time.sleep(2 * (i + 1))
+                time.sleep(backoff * (i + 1))
     raise RuntimeError(f'{url[:120]} failed after {tries} tries: {last}')
 
 
@@ -104,8 +112,30 @@ def bars_sina_gold():
     return _frame([[r['date'], r['open'], r['high'], r['low'], r['close'], r['volume']] for r in data])
 
 
+EM = {'Referer': 'https://quote.eastmoney.com/'}
+
+
+def bars_eastmoney_gold(start='20200101'):
+    """Eastmoney COMEX gold continuous (101.GC00Y) daily bars, with volume. Reachable from mainland IPs only.
+    Open/high/low match Yahoo GC=F; close is the last trade (same as Sina), which can differ from Yahoo's
+    close by a few dollars; volume matches Yahoo's within a few percent."""
+    j = http_json('https://push2his.eastmoney.com/api/qt/stock/kline/get',
+                  {'secid': '101.GC00Y', 'fields1': 'f1,f2,f3', 'fields2': 'f51,f52,f53,f54,f55,f56',
+                   'klt': 101, 'fqt': 0, 'beg': start, 'end': '20500101', 'lmt': 3000}, EM,
+                  tries=3, timeout=20, backoff=15)
+    rows = [r.split(',') for r in ((j.get('data') or {}).get('klines') or [])]
+    return _frame([[r[0], r[1], r[3], r[4], r[2], r[5]] for r in rows])  # date, open, close, high, low, volume
+
+
 def gold_bars(ticker='GC=F'):
     errors = []
+    try:
+        f = bars_eastmoney_gold()
+        if len(f) >= 300 and f['volume'].tail(20).gt(0).all():
+            return f, '东方财富 COMEX 黄金连续（GC00Y，含成交量）', errors
+        errors.append(f'Eastmoney GC00Y: only {len(f)} rows or missing volume')
+    except Exception as exc:
+        errors.append(f'Eastmoney GC00Y: {exc}')
     try:
         f, _ = bars_yahoo(ticker)
         if len(f) >= 300:
@@ -168,6 +198,39 @@ def sse_option_day(date):
                   {'isPagination': 'false', 'sqlId': 'COMMON_SSE_ZQPZ_YSP_QQ_SJTJ_MRTJ_CX',
                    'tradeDate': date.replace('-', '')}, SSE, timeout=25)
     return j.get('result') or []
+
+
+SZSE = {'Referer': 'https://investor.szse.cn/market/option/day/index.html'}
+
+
+def szse_option_day(date):
+    """SZSE ETF option daily overview, one row per underlying ETF. Empty list on a non-trading day.
+    Answers from mainland IPs; overseas runners get 403 / reset."""
+    j = http_json('https://investor.szse.cn/api/report/ShowReport/data',
+                  {'SHOWTYPE': 'JSON', 'CATALOGID': 'ysprdzb', 'TABKEY': 'tab1', 'txtQueryDate': date},
+                  SZSE, tries=3, timeout=20)
+    return (j[0].get('data') if j else None) or []
+
+
+FUND_FLOW_COLS = ['date', 'main', 'small', 'medium', 'large', 'super', 'main_pct', 'small_pct', 'medium_pct',
+                  'large_pct', 'super_pct', 'sh_close', 'sh_pct', 'sz_close', 'sz_pct']
+
+
+def market_fund_flow():
+    """Eastmoney whole-market (Shanghai + Shenzhen) daily fund flow, about the last 120 trading days.
+    Amounts in yuan: main = super-large + large orders. Same series as data.eastmoney.com/zjlx/dpzjlx.html."""
+    j = http_json('https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get',
+                  {'lmt': 0, 'klt': 101, 'secid': '1.000001', 'secid2': '0.399001', 'fields1': 'f1,f2,f3,f7',
+                   'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65'},
+                  {'Referer': 'https://data.eastmoney.com/zjlx/dpzjlx.html'}, tries=3, timeout=20, backoff=15)
+    rows = [r.split(',') for r in ((j.get('data') or {}).get('klines') or [])]
+    if not rows:
+        raise RuntimeError('fund flow: empty klines')
+    f = pd.DataFrame([r[:15] for r in rows], columns=FUND_FLOW_COLS)
+    f['date'] = pd.to_datetime(f['date'])
+    for c in FUND_FLOW_COLS[1:]:
+        f[c] = pd.to_numeric(f[c], errors='coerce')
+    return f.dropna(subset=['main']).sort_values('date').reset_index(drop=True)
 
 
 def datacenter(report, filt, sort, page_size=500, max_pages=40):

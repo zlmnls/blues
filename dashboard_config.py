@@ -89,6 +89,8 @@ OBS_NOTES = {
            'source': EP['21923'] + ' 03:53–04:09、04:55–05:03；' + EP['21925'] + ' 00:34–00:53', 'has_rule': False},
     'breadth': {'rule': '9 月 21、22 日的涨跌家数、成交额比和阿姆氏指标让他判断短期风险。没有给出固定阈值', 'source': EP['21910'], 'has_rule': False},
     'insider': {'rule': '高管、股东增减持比例偏向减持被当作看空依据之一。具体算法和阈值没公开', 'source': EP['21908'], 'has_rule': False},
+    'fund_flow': {'rule': '他说自己追踪“整个市场资金流向”，看到的是严重流出，用作“震荡下行”中期观点的依据之一。没有公开算法、数据来源和阈值。博主未给出买卖规则',
+                  'source': EP['21925'] + ' 01:36–01:52', 'has_rule': False},
 }
 
 # The user's own gold plan (set up on 2026-10-23 from the user's chart, not from the blogger).

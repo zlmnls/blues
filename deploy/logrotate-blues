@@ -1,0 +1,10 @@
+/var/log/blues/*.log {
+    weekly
+    rotate 8
+    maxsize 5M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

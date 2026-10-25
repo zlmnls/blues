@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import math
 from pathlib import Path
+import time
 import traceback
 
 import numpy as np
@@ -294,8 +295,13 @@ def instrument_block(inst, now_utc, errors):
         raw, source, fetch_errors = S.gold_bars(inst['yahoo'])
         daily = S.completed_gold_bars(raw, now_utc)
         source += '，只用已收完的交易日'
-        notes = ['GC=F 是近月连续合约，和同花顺 GC0W 主连的换月时点可能不同，点位会有几美元差异',
-                 'Yahoo 有个别日子成交量为 0（今年 4/2、7/2），这些日子在 VW-MACD 里没有权重']
+        if source.startswith('东方财富'):
+            notes = ['GC00Y 是东方财富的 COMEX 黄金连续合约，和同花顺 GC0W 主连的换月时点可能不同，点位会有几美元差异',
+                     '收盘价是最后成交价（和新浪一致），和 Yahoo GC=F 的收盘价个别日子差几到二十美元；开高低和成交量基本一致',
+                     '国内服务器访问 Yahoo 被限流（429），所以改用东方财富；它拿不到时依次退回 Yahoo、新浪（新浪无成交量）']
+        else:
+            notes = ['GC=F 是近月连续合约，和同花顺 GC0W 主连的换月时点可能不同，点位会有几美元差异',
+                     'Yahoo 有个别日子成交量为 0（今年 4/2、7/2），这些日子在 VW-MACD 里没有权重']
     else:
         daily, source, fetch_errors = S.index_bars(inst)
         notes = ['指数成交量来自数据源的「手」，VW-MACD 只用量的相对大小，不受单位影响']
@@ -431,27 +437,49 @@ def obs_equity_bond(as_of):
             **vn('equity_bond')}, ty
 
 
-def obs_pcr(sse_dates, hist_path):
-    """SSE ETF option PCR (volume). History is kept in a CSV and only missing days are fetched."""
+def _num(v):
+    return float(str(v).replace(',', '') or 0)
+
+
+def sse_pcr_row(d):
+    rows = S.sse_option_day(d)
+    cv = sum(_num(r['CALL_VOLUME']) for r in rows)
+    pv = sum(_num(r['PUT_VOLUME']) for r in rows)
+    coi = sum(_num(r['LEAVES_CALL_QTY']) for r in rows)
+    poi = sum(_num(r['LEAVES_PUT_QTY']) for r in rows)
+    if not rows or cv <= 0:
+        raise RuntimeError('empty')
+    return {'date': d, 'call_volume': cv, 'put_volume': pv, 'call_oi': coi, 'put_oi': poi,
+            'pcr_volume': pv / cv, 'pcr_oi': poi / coi if coi else None, 'underlyings': len(rows)}
+
+
+def szse_pcr_row(d, rows=None):
+    """SZSE overview columns: rccjl call volume, rpcjl put volume, wpcrchys call OI, wpcrphys put OI."""
+    rows = S.szse_option_day(d) if rows is None else rows
+    cv = sum(_num(r['rccjl']) for r in rows)
+    pv = sum(_num(r['rpcjl']) for r in rows)
+    coi = sum(_num(r['wpcrchys']) for r in rows)
+    poi = sum(_num(r['wpcrphys']) for r in rows)
+    if not rows or cv <= 0:
+        raise RuntimeError('empty')
+    return {'date': d, 'call_volume': cv, 'put_volume': pv, 'call_oi': coi, 'put_oi': poi,
+            'pcr_volume': pv / cv, 'pcr_oi': poi / coi if coi else None, 'underlyings': len(rows)}
+
+
+def pcr_history(dates, hist_path, fetch_row, workers=4, pause=0.0):
+    """Keep a per-exchange PCR history CSV; fetch only the trading days it does not have yet."""
     hist_path = Path(hist_path)
     old = pd.read_csv(hist_path, dtype={'date': str}) if hist_path.exists() else pd.DataFrame(columns=['date'])
     have = set(old['date'])
-    want = [d for d in sse_dates[-90:] if d not in have]
+    want = [d for d in dates[-90:] if d not in have]
     new, errs = [], []
 
     def one(d):
-        rows = S.sse_option_day(d)
-        num = lambda v: float(str(v).replace(',', '') or 0)
-        cv = sum(num(r['CALL_VOLUME']) for r in rows)
-        pv = sum(num(r['PUT_VOLUME']) for r in rows)
-        coi = sum(num(r['LEAVES_CALL_QTY']) for r in rows)
-        poi = sum(num(r['LEAVES_PUT_QTY']) for r in rows)
-        if not rows or cv <= 0:
-            raise RuntimeError('empty')
-        return {'date': d, 'call_volume': cv, 'put_volume': pv, 'call_oi': coi, 'put_oi': poi,
-                'pcr_volume': pv / cv, 'pcr_oi': poi / coi if coi else None, 'underlyings': len(rows)}
+        if pause:
+            time.sleep(pause)
+        return fetch_row(d)
 
-    with ThreadPoolExecutor(4) as ex:
+    with ThreadPoolExecutor(workers) as ex:
         futs = {d: ex.submit(one, d) for d in want}
         for d, fu in futs.items():
             try:
@@ -462,22 +490,99 @@ def obs_pcr(sse_dates, hist_path):
     f = f.drop_duplicates('date', keep='last').sort_values('date').reset_index(drop=True)
     hist_path.parent.mkdir(parents=True, exist_ok=True)
     f.to_csv(hist_path, index=False)
+    return f, errs
+
+
+def combine_pcr(sse, szse):
+    """Cross-exchange PCR: sum puts and calls of both exchanges first, then divide. Only dates both have."""
+    cols = ['call_volume', 'put_volume', 'call_oi', 'put_oi']
+    m = sse[['date'] + cols].merge(szse[['date'] + cols], on='date', suffixes=('_sh', '_sz'))
+    out = pd.DataFrame({'date': m['date']})
+    for c in cols:
+        out[c] = m[c + '_sh'].astype(float) + m[c + '_sz'].astype(float)
+    out['pcr_volume'] = out['put_volume'] / out['call_volume']
+    out['pcr_oi'] = out['put_oi'] / out['call_oi'].where(out['call_oi'] > 0)
+    out['pcr_volume_sse'] = m['put_volume_sh'].astype(float) / m['call_volume_sh'].astype(float)
+    out['pcr_volume_szse'] = m['put_volume_sz'].astype(float) / m['call_volume_sz'].astype(float)
+    return out.sort_values('date').reset_index(drop=True)
+
+
+def obs_pcr(sse_dates, hist_dir):
+    """ETF option PCR (volume). Both exchanges combined when the SZSE history is long enough, else SSE only."""
+    hist_dir = Path(hist_dir)
+    sse, errs = pcr_history(sse_dates, hist_dir / 'sse_pcr.csv', sse_pcr_row)
+    szse_err = None
+    try:
+        szse, zerrs = pcr_history(sse_dates, hist_dir / 'szse_pcr.csv', szse_pcr_row, workers=2, pause=0.3)
+        errs += ['深交所 ' + e for e in zerrs]
+    except Exception as exc:
+        szse, szse_err = pd.DataFrame(columns=['date']), f'{type(exc).__name__}: {exc}'[:200]
+    both = combine_pcr(sse, szse) if len(szse) and len(sse) else pd.DataFrame()
+    if len(both) >= 60:
+        f, scope = both, 'both'
+    else:
+        f, scope = sse.copy(), 'sse'
+        if szse_err is None:
+            szse_err = f'深交所 PCR 只拿到 {len(both)} 个和上交所重合的交易日，带宽需要 60 天'
     if len(f) < 60:
-        return no_data(f'上交所 PCR 只拿到 {len(f)} 天，带宽需要 60 天', fetch_errors=errs[:5], **vn('pcr'))
+        return no_data(f'PCR 只拿到 {len(f)} 天，带宽需要 60 天', fetch_errors=errs[:5], szse_error=szse_err, **vn('pcr'))
+    f = f.copy()
     f['date'] = pd.to_datetime(f['date'])
     b = O.pcr_spike(f, 'pcr_volume', window=60, k=2.0, ddof=1)
     lb = b.iloc[-1]
     tail = b.tail(90)
     sig = '风险提示（看空）：触及上轨' if bool(lb['touch_upper']) else ('接近上轨，还没碰到' if bool(lb['rising_toward_upper']) else '未触及上轨')
-    return {'status': 'ok', 'date': ds(lb['date']), 'pcr_volume': rnd(lb['value'], 3), 'upper': rnd(lb['upper'], 3),
-            'middle': rnd(lb['middle'], 3), 'lower': rnd(lb['lower'], 3), 'pcr_oi': rnd(f['pcr_oi'].iloc[-1], 3),
-            'touch_upper': bool(lb['touch_upper']), 'last_touch_upper': last_true_date(b, 'touch_upper'), 'signal': sig,
-            'history': {'date': [ds(x) for x in tail['date']], 'value': [rnd(x, 3) for x in tail['value']],
-                        'upper': [rnd(x, 3) for x in tail['upper']], 'middle': [rnd(x, 3) for x in tail['middle']]},
-            'fetch_errors': errs[:5],
-            'source': '上交所股票期权每日统计（全部 ETF 期权合计）',
-            'note': 'PCR = 认沽成交量 / 认购成交量；带宽 60 个交易日、±2 倍样本标准差。深交所期权数据在海外服务器上请求被拒（403），所以只含上交所',
-            **vn('pcr')}
+    out = {'status': 'ok', 'date': ds(lb['date']), 'scope': scope,
+           'scope_label': '沪深两所 ETF 期权合计' if scope == 'both' else '只含上交所 ETF 期权',
+           'pcr_volume': rnd(lb['value'], 3), 'upper': rnd(lb['upper'], 3),
+           'middle': rnd(lb['middle'], 3), 'lower': rnd(lb['lower'], 3), 'pcr_oi': rnd(f['pcr_oi'].iloc[-1], 3),
+           'touch_upper': bool(lb['touch_upper']), 'last_touch_upper': last_true_date(b, 'touch_upper'), 'signal': sig,
+           'history': {'date': [ds(x) for x in tail['date']], 'value': [rnd(x, 3) for x in tail['value']],
+                       'upper': [rnd(x, 3) for x in tail['upper']], 'middle': [rnd(x, 3) for x in tail['middle']]},
+           'fetch_errors': errs[:5], 'szse_error': szse_err}
+    if scope == 'both':
+        out.update({'pcr_volume_sse': rnd(f['pcr_volume_sse'].iloc[-1], 3), 'pcr_volume_szse': rnd(f['pcr_volume_szse'].iloc[-1], 3),
+                    'source': '上交所股票期权每日统计 + 深交所期权日度概况（两所全部 ETF 期权合计）',
+                    'note': 'PCR = 两所认沽成交量之和 / 两所认购成交量之和（先加总再相除）；带宽 60 个交易日、±2 倍样本标准差。博主说的是“全市场期权 PCR”，所以用两所合计；不含中金所股指期权'})
+    else:
+        out.update({'source': '上交所股票期权每日统计（全部 ETF 期权合计）',
+                    'note': 'PCR = 认沽成交量 / 认购成交量；带宽 60 个交易日、±2 倍样本标准差。本次深交所数据不够，只含上交所：' + (szse_err or '')})
+    return {**out, **vn('pcr')}
+
+
+def fund_flow_summary(f):
+    """Latest day, 5/20-day sums and the current run of outflow / inflow days for the main-force series (yuan)."""
+    f = f.sort_values('date').reset_index(drop=True)
+    sign = np.sign(f['main'])
+    run, last = 0, sign.iloc[-1]
+    for v in sign.iloc[::-1]:
+        if v != last or v == 0:
+            break
+        run += 1
+    return {'date': ds(f['date'].iloc[-1]), 'main_100m': f['main'].iloc[-1] / 1e8,
+            'main_pct': f['main_pct'].iloc[-1],
+            'super_100m': f['super'].iloc[-1] / 1e8, 'large_100m': f['large'].iloc[-1] / 1e8,
+            'medium_100m': f['medium'].iloc[-1] / 1e8, 'small_100m': f['small'].iloc[-1] / 1e8,
+            'sum5_100m': f['main'].tail(5).sum() / 1e8, 'sum20_100m': f['main'].tail(20).sum() / 1e8,
+            'outflow_days_20': int((f['main'].tail(20) < 0).sum()),
+            'run_days': run, 'run_side': '流出' if last < 0 else ('流入' if last > 0 else '持平')}
+
+
+def obs_fund_flow():
+    f = S.market_fund_flow()
+    s = fund_flow_summary(f)
+    tail = f.tail(120)
+    return {'status': 'ok', 'date': s['date'],
+            'main_100m': rnd(s['main_100m'], 1), 'main_pct': rnd(s['main_pct'], 2),
+            'super_100m': rnd(s['super_100m'], 1), 'large_100m': rnd(s['large_100m'], 1),
+            'medium_100m': rnd(s['medium_100m'], 1), 'small_100m': rnd(s['small_100m'], 1),
+            'sum5_100m': rnd(s['sum5_100m'], 1), 'sum20_100m': rnd(s['sum20_100m'], 1),
+            'outflow_days_20': s['outflow_days_20'], 'run_days': s['run_days'], 'run_side': s['run_side'],
+            'signal': '博主未给出买卖规则',
+            'history': {'date': [ds(x) for x in tail['date']], 'main_100m': [rnd(x / 1e8, 1) for x in tail['main']]},
+            'source': '东方财富 大盘资金流向（沪深两市，push2his 接口）',
+            'note': '主力净流入 = 超大单 + 大单净流入，单位亿元，是东方财富按逐笔成交单笔金额划分的口径。博主没公开他的资金流向算法，这里只是同名数据的公开口径，不代表他的数字',
+            **vn('fund_flow')}
 
 
 def obs_etf_volume():
@@ -583,6 +688,28 @@ def obs_insider(as_of):
 
 # ---------------------------------------------------------------- assembly
 
+def unavailable_items(obs):
+    """Items the dashboard cannot show, with the real reason as of this run (server is in mainland China)."""
+    out = []
+    p = obs.get('pcr', {})
+    if p.get('status') != 'ok' or p.get('scope') != 'both':
+        out.append({'name': '深交所期权 PCR', 'reason': '国内服务器本次没拿到足够的深交所数据：' + str(p.get('szse_error') or p.get('reason') or '原因未知')})
+    out += [
+        {'name': '债券仓位占比', 'reason': '博主没说是哪一类资金的仓位，没有可算的定义'},
+        {'name': '汇金 / 中证金融仓位报告', 'reason': '博主没展示数据来源和算法'},
+    ]
+    ff = obs.get('fund_flow', {})
+    if ff.get('status') != 'ok':
+        out.append({'name': '全市场资金流向', 'reason': '东方财富资金流接口（push2his）本次请求失败（它会对短时间内多次请求的 IP 暂时断开连接）：' + str(ff.get('reason') or '')[:160]})
+    out += [
+        {'name': '博主自己的资金流向算法', 'reason': '博主没公开；看板里的资金流向是东方财富的公开口径'},
+        {'name': 'P20 / P60（站上 20/60 日线占比）', 'reason': '要逐股拉 5,500 多只股票的历史 K 线，每天跑太重，看板没接入'},
+        {'name': '高管增减持比例', 'reason': '代码里只有股东增减持汇总，高管部分的算法博主没公开'},
+        {'name': '博主综合评分', 'reason': '博主没公开权重和算法'},
+    ]
+    return out
+
+
 def build(out_dir, now_utc=None, skip_slow=False):
     now_utc = now_utc or datetime.now(timezone.utc)
     now_cn = now_utc.astimezone(CN)
@@ -627,25 +754,18 @@ def build(out_dir, now_utc=None, skip_slow=False):
         rate = float(ty['cn2y'].dropna().iloc[-1]) if ty['cn2y'].notna().any() else None
     else:
         obs['equity_bond'] = {**eb, **vn('equity_bond')}
-    obs['pcr'] = guarded('pcr', lambda: obs_pcr(sse_dates, data_dir / 'history' / 'sse_pcr.csv'), errors) \
+    obs['pcr'] = guarded('pcr', lambda: obs_pcr(sse_dates, data_dir / 'history'), errors) \
         if not skip_slow else no_data('本次本地运行跳过', **vn('pcr'))
     obs['etf_volume'] = guarded('etf_volume', obs_etf_volume, errors)
     obs['holdings'] = guarded('holdings', obs_holdings, errors)
     obs['basis'] = guarded('basis', lambda: obs_basis(a_date), errors)
     obs['iv'] = guarded('iv', lambda: obs_iv(rate), errors)
     obs['insider'] = guarded('insider', lambda: obs_insider(a_date), errors)
-    for k in ['pcr', 'etf_volume', 'holdings', 'basis', 'iv', 'insider', 'cap_gdp']:
+    obs['fund_flow'] = guarded('fund_flow', obs_fund_flow, errors)
+    for k in ['pcr', 'etf_volume', 'holdings', 'basis', 'iv', 'insider', 'cap_gdp', 'fund_flow']:
         if obs[k].get('status') != 'ok':
             obs[k] = {**vn(k), **obs[k]}
-    unavailable = [
-        {'name': '深交所期权 PCR', 'reason': '深交所接口对海外服务器返回 403 / 断开，GitHub Actions 上拿不到'},
-        {'name': '债券仓位占比', 'reason': '博主没说是哪一类资金的仓位，没有可算的定义'},
-        {'name': '汇金 / 中证金融仓位报告', 'reason': '博主没展示数据来源和算法'},
-        {'name': '全市场资金流向', 'reason': '博主没公开算法；东方财富资金流接口（push2）在海外也连不上'},
-        {'name': 'P20 / P60（站上 20/60 日线占比）', 'reason': '要逐股拉 5,500 多只股票的历史 K 线，每天跑太重，看板没接入'},
-        {'name': '高管增减持比例', 'reason': '代码里只有股东增减持汇总，高管部分的算法博主没公开'},
-        {'name': '博主综合评分', 'reason': '博主没公开权重和算法'},
-    ]
+    unavailable = unavailable_items(obs)
     # history row for the daily observation archive
     row = {'date': a_date}
     b = obs['breadth']
@@ -659,6 +779,11 @@ def build(out_dir, now_utc=None, skip_slow=False):
         row['atm_iv_pct'] = obs['iv']['atm_iv_pct']
     if obs['basis'].get('status') == 'ok':
         row['if_basis_pct'] = obs['basis']['basis_pct']
+    if obs['pcr'].get('status') == 'ok':
+        row['pcr_volume'] = obs['pcr']['pcr_volume']
+        row['pcr_scope'] = obs['pcr']['scope']
+    if obs['fund_flow'].get('status') == 'ok' and obs['fund_flow']['date'] == a_date:
+        row['main_net_inflow_100m'] = obs['fund_flow']['main_100m']
     if a_date:
         hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True).sort_values('date')
         hist_path.parent.mkdir(parents=True, exist_ok=True)

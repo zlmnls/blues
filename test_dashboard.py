@@ -59,6 +59,54 @@ class DashboardTests(unittest.TestCase):
         out = S.completed_gold_bars(f, pd.Timestamp('2026-10-24T08:00Z'))
         assert out['date'].iloc[-1] == pd.Timestamp('2026-10-23')
 
+    def test_szse_pcr_row_parses_overview_columns(self):
+        rows = [{'bddm': '159915', 'rccjl': '2,526,987', 'rpcjl': '2,061,769', 'wpcrchys': '1,613,339', 'wpcrphys': '735,081'},
+                {'bddm': '159919', 'rccjl': '150,991', 'rpcjl': '141,707', 'wpcrchys': '172,146', 'wpcrphys': '93,709'}]
+        r = B.szse_pcr_row('2026-10-23', rows)
+        assert r['call_volume'] == 2526987 + 150991 and r['put_volume'] == 2061769 + 141707
+        assert abs(r['pcr_volume'] - (2061769 + 141707) / (2526987 + 150991)) < 1e-12
+        assert abs(r['pcr_oi'] - (735081 + 93709) / (1613339 + 172146)) < 1e-12
+        with self.assertRaises(RuntimeError):
+            B.szse_pcr_row('2026-10-24', [])  # non-trading day: empty overview
+
+    def test_combine_pcr_sums_before_dividing_and_keeps_common_dates(self):
+        sse = pd.DataFrame({'date': ['2026-10-22', '2026-10-23'], 'call_volume': [100, 200], 'put_volume': [50, 300],
+                            'call_oi': [10, 10], 'put_oi': [5, 5]})
+        szse = pd.DataFrame({'date': ['2026-10-23', '2026-10-26'], 'call_volume': [800, 1], 'put_volume': [100, 1],
+                             'call_oi': [30, 1], 'put_oi': [15, 1]})
+        c = B.combine_pcr(sse, szse)
+        assert c['date'].tolist() == ['2026-10-23']
+        assert c['pcr_volume'].iloc[0] == (300 + 100) / (200 + 800)  # not the mean of 1.5 and 0.125
+        assert c['pcr_oi'].iloc[0] == 20 / 40
+        assert c['pcr_volume_sse'].iloc[0] == 1.5 and c['pcr_volume_szse'].iloc[0] == 0.125
+
+    def test_fund_flow_summary_runs_and_sums(self):
+        main = [5e9, -1e9, -2e9, 3e9, -4e9, -6e9, -8e9]
+        f = pd.DataFrame({'date': pd.bdate_range('2026-10-13', periods=7), 'main': main, 'small': [0.0] * 7,
+                          'medium': [0.0] * 7, 'large': [0.0] * 7, 'super': main, 'main_pct': [-1.0] * 7})
+        s = B.fund_flow_summary(f)
+        assert s['main_100m'] == -80 and s['run_days'] == 3 and s['run_side'] == '流出'
+        assert abs(s['sum5_100m'] - (-2 + 3 - 4 - 6 - 8) * 10) < 1e-9
+        assert s['outflow_days_20'] == 5
+
+    def test_unavailable_items_follow_this_run(self):
+        ok = {'pcr': {'status': 'ok', 'scope': 'both'}, 'fund_flow': {'status': 'ok'}}
+        names = [u['name'] for u in B.unavailable_items(ok)]
+        assert '深交所期权 PCR' not in names and '全市场资金流向' not in names
+        bad = {'pcr': {'status': 'ok', 'scope': 'sse', 'szse_error': 'HTTP 403'}, 'fund_flow': {'status': '无数据', 'reason': 'closed'}}
+        un = {u['name']: u['reason'] for u in B.unavailable_items(bad)}
+        assert 'HTTP 403' in un['深交所期权 PCR'] and 'closed' in un['全市场资金流向']
+
+    def test_eastmoney_gold_column_order(self):
+        orig = S.http_json
+        S.http_json = lambda *a, **k: {'data': {'klines': ['2026-10-23,4042.2,4010.0,4050.2,3989.1,173280']}}
+        try:
+            f = S.bars_eastmoney_gold()
+        finally:
+            S.http_json = orig
+        r = f.iloc[-1]
+        assert (r['open'], r['high'], r['low'], r['close'], r['volume']) == (4042.2, 4050.2, 3989.1, 4010.0, 173280)
+
 
 if __name__ == '__main__':
     unittest.main()
