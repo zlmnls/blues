@@ -26,7 +26,7 @@
 
 ## 原始视频素材
 
-七个分析参考视频保存在 [materials/videos](materials/videos)，使用 Git LFS 管理：
+八个分析参考视频保存在 [materials/videos](materials/videos)，使用 Git LFS 管理：
 
 | 文件 | 大小 |
 |---|---:|
@@ -37,6 +37,7 @@
 | [21923.mp4](materials/videos/21923.mp4) | 82.92 MiB |
 | [21924.mp4](materials/videos/21924.mp4) | 76.95 MiB |
 | [21925.mp4](materials/videos/21925.mp4) | 64.42 MiB |
+| [21964.mp4](materials/videos/21964.mp4) | 46.85 MiB |
 
 在 GitHub 文件页面点击下载可获取视频。克隆仓库前需安装 [Git LFS](https://git-lfs.com/)，已有克隆可在仓库目录运行：
 
